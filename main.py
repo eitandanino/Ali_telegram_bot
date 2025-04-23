@@ -1,3 +1,5 @@
+import time
+
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -43,14 +45,17 @@ HEBREW_TRIGGERS = ["תחפש לי", "תמצא לי", "תשלוף לי"]
 # Flask web server setup
 app_flask = Flask(__name__)
 
+
 @app_flask.route('/')
 def index():
     return "🤖 Bot is alive!"
 
+
 # Function to run Flask in a separate thread
 def run_flask():
-    port = int(os.environ.get("PORT", 5000))  # Render provides $PORT env var
+    port = int(os.environ.get("PORT", 5050))  # Render provides $PORT env var
     app_flask.run(host="0.0.0.0", port=port)
+
 
 # Telegram bot functions
 async def get_aliexpress_product_data(search_text: str):
@@ -69,7 +74,12 @@ async def get_aliexpress_product_data(search_text: str):
         "Connection": "keep-alive"
     }
 
-    response = requests.get(url, headers=headers)
+    cookies = {
+        "__rtbh.lid": "%7B%22eventType%22%3A%22lid%22%2C%22id%22%3A%229At5NANObKI4BGGakxXl%22%2C%22expiryDate%22%3A%222026-04-23T12%3A47%3A15.678Z%22%7D",
+        "__rtbh.uid": "%7B%22eventType%22%3A%22uid%22%2C%22id%22%3A%226122555644%22%2C%22expiryDate%22%3A%222026-04-23T12%3A47%3A15.678Z%22%7D"
+    }
+
+    response = requests.get(url, headers=headers, cookies=cookies)
     html_content = response.text
     soup = BeautifulSoup(html_content, 'html.parser')
 
@@ -173,8 +183,8 @@ async def fetch_and_create_collage(products, size=(500, 500)):
         image = image.resize(size)
 
         draw = ImageDraw.Draw(image)
-        font_size = 50
-        font_path = "/System/Library/Fonts/Supplemental/Arial.ttf"
+        font_size = 45
+        font_path = os.path.join(os.path.dirname(__file__), 'fonts', 'DejaVuSans.ttf')  # Path relative to your script
 
         try:
             font = ImageFont.truetype(font_path, font_size)
@@ -279,6 +289,15 @@ async def handle_hebrew_search(update: Update, context):
     )
 
 
+def delete_webhook():
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook"
+    try:
+        response = requests.post(url)
+        print(f"Webhook deleted: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Failed to delete webhook: {e}")
+
+
 async def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -289,5 +308,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    delete_webhook()
+    time.sleep(3)
     threading.Thread(target=run_flask).start()
     asyncio.get_event_loop().run_until_complete(main())

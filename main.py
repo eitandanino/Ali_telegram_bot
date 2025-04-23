@@ -16,10 +16,16 @@ import aiohttp
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
+from flask import Flask
+import threading
 
+# Apply necessary asynchronous handling
 nest_asyncio.apply()
+
+# Load environment variables from .env file
 load_dotenv()
 
+# Environment variables
 ALIEXPRESS_APP_KEY = os.getenv("ALIEXPRESS_APP_KEY")
 ALIEXPRESS_APP_SECRET = os.getenv("ALIEXPRESS_APP_SECRET")
 ALIEXPRESS_URL = os.getenv("ALIEXPRESS_URL")
@@ -29,18 +35,29 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)  # Replace with your API key
 model = genai.GenerativeModel("gemini-2.0-flash")
 
-
+# Set up the client for AliExpress API
 client = IopClient(ALIEXPRESS_URL, ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET)
+
+# Triggers for Hebrew searches
 HEBREW_TRIGGERS = ["תחפש לי", "תמצא לי", "תשלוף לי"]
 
+# Flask web server setup
+app_flask = Flask(__name__)
 
+@app_flask.route('/')
+def index():
+    return "🤖 Bot is alive!"
+
+# Function to run Flask in a separate thread
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))  # Render provides $PORT env var
+    app_flask.run(host="0.0.0.0", port=port)
+
+# Telegram bot functions
 async def get_aliexpress_product_data(search_text: str):
-    # Use browser-cookie3 to get the cookies from your Chrome session
     cj = browser_cookie3.chrome(domain_name="aliexpress.com")
-
     url = f'https://he.aliexpress.com/wholesale?SearchText={urllib.parse.quote(search_text)}'
 
-    # Update headers for the request
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -54,76 +71,45 @@ async def get_aliexpress_product_data(search_text: str):
         "Connection": "keep-alive"
     }
 
-    # Perform the request with the cookies from the browser session
     response = requests.get(url, headers=headers, cookies=cj)
-
     html_content = response.text
-
     soup = BeautifulSoup(html_content, 'html.parser')
 
-    # Find the script tag that contains the itemList data
     script_tag = soup.find('script', string=lambda t: t and 'itemList' in t and 'content' in t)
-
     item_ids = []
 
     if script_tag:
         script_text = script_tag.string
-
-        # Extract the pdp_cdi JSON string from the script (if available)
         pattern = r'"pdp_cdi":"([^"]+)"'
         matches = re.findall(pattern, script_text)
 
         if matches:
             for match in matches:
-                # Decode the URL-encoded JSON string
                 decoded_json = urllib.parse.unquote(match)
-
-                # Extract all itemId values from the decoded JSON string
                 item_ids.extend(re.findall(r'"itemId":"(\d+)"', decoded_json))
 
-        else:
-            print("pdp_cdi data not found.")
-
-        # Now, extract image URLs, titles, and prices using regex pattern
         pattern = re.compile(
             r'"image"\s*:\s*\{[^}]*?"imgUrl"\s*:\s*"([^"]+)"[^}]*\}.*?'
             r'"title"\s*:\s*\{[^}]*?"displayTitle"\s*:\s*"([^"]+)"[^}]*\}.*?'
             r'"salePrice"\s*:\s*\{[^}]*?"minPrice"\s*:\s*([\d.]+)[^}]*\}.*?',
             re.DOTALL
         )
-
         matches = pattern.findall(script_text)
         results = []
 
         for i, (img_url, title, price) in enumerate(matches, start=1):
             product_data = {}
-            if i - 1 < len(item_ids):  # Ensure we are within bounds of item_ids
+            if i - 1 < len(item_ids):
                 full_img_url = f"https:{img_url}" if img_url.startswith("//") else img_url
-
-                # Extract product ID (itemId) and construct the product URL
-                product_url = f"https://www.aliexpress.com/item/{item_ids[i - 1]}.html"  # Use item_ids[i-1] to match the current product
-
-                # Print the information
-                # print(f"📦 Product #{i}")
-                # print(f"🖼️ Image URL: {full_img_url}")
-                # print(f"🏷️ Title: {title}")
-                # print(f"💰 Sale Price: ₪ {price}")
-                # print(f"🌐 Product URL: {product_url}")
-                # print("-" * 40)
+                product_url = f"https://www.aliexpress.com/item/{item_ids[i - 1]}.html"
                 product_data["link"] = product_url
                 product_data['title'] = title
                 product_data['image'] = full_img_url
                 product_data['price'] = price
-
                 results.append(product_data)
-            else:
-                print(f"Warning: No itemId available for product #{i}. Skipping...")
-    else:
-        print("No script tag with item list found.")
     return results[:4]
 
 
-# === Title Enhancer ===
 async def improve_title_with_gemini(title: str) -> str:
     prompt = (
         f"תשפר את שם המוצר הבא שיהיה מושך, ברור וקולח לקונים בעברית:\n\n"
@@ -138,7 +124,6 @@ async def improve_title_with_gemini(title: str) -> str:
         return title
 
 
-# === AliExpress Promotion Link Generator ===
 def generate_promotion_links(product_list):
     enriched_products = []
 
@@ -166,7 +151,6 @@ def generate_promotion_links(product_list):
                 product['link'] = promotion_links[0].get('promotion_link')
             else:
                 product['link'] = source_url
-
         except AttributeError:
             product['link'] = source_url
 
@@ -175,12 +159,10 @@ def generate_promotion_links(product_list):
     return enriched_products
 
 
-# Updated fetch_and_create_collage function
 async def fetch_and_create_collage(products, size=(500, 500)):
     processed_images = []
 
     for idx, product in enumerate(products, start=1):
-        # Split the image URL to remove the .avif extension if present
         image_url = product["image"]
 
         async with aiohttp.ClientSession() as session:
@@ -241,7 +223,6 @@ async def fetch_and_create_collage(products, size=(500, 500)):
     return output
 
 
-# === Telegram Handler ===
 async def handle_hebrew_search(update: Update, context):
     user_text = update.message.text.strip()
 
@@ -258,14 +239,12 @@ async def handle_hebrew_search(update: Update, context):
         await update.message.reply_text("❗ תכתוב מה לחפש אחרי 'תחפש לי', 'תמצא לי' או 'תשלוף לי'.")
         return
 
-    # 👇 Send loading message and save reference to it
     loading_message = await update.message.reply_text(
         "🧙‍♂️הקוסם בודק מחירים, עובר על ביקורות ומכין לכם את הקסם🪄 — שנייה וזה אצלכם!!"
     )
 
     products = await get_aliexpress_product_data(query)
 
-    # Filter out bundles
     products = [
         p for p in products
         if "BundleDeals" not in p["link"]
@@ -281,7 +260,6 @@ async def handle_hebrew_search(update: Update, context):
 
     collage_image = await fetch_and_create_collage(products)
 
-    # Improve product titles and format message
     product_texts = []
     for i, product in enumerate(products, start=1):
         improved_title = await improve_title_with_gemini(product['title'])
@@ -294,22 +272,20 @@ async def handle_hebrew_search(update: Update, context):
 
     final_message = "\n\n".join(product_texts)
 
-    # 👇 Delete the loading message before sending the final one
     await loading_message.delete()
-
-    await update.message.reply_photo(
-        photo=collage_image,
-        caption=final_message,
-        parse_mode="HTML",
-        reply_to_message_id=update.message.message_id
-    )
+    await update.message.reply_text(final_message)
+    await update.message.reply_photo(photo=collage_image)
 
 
 async def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_hebrew_search))
-    print("🤖 Bot is running...")
-    await app.run_polling()
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    message_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_hebrew_search)
+    application.add_handler(message_handler)
+
+    await application.run_polling()
+
 
 if __name__ == "__main__":
+    threading.Thread(target=run_flask).start()
     asyncio.run(main())

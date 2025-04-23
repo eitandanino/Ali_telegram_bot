@@ -272,8 +272,12 @@ async def handle_hebrew_search(update: Update, context):
     final_message = "\n\n".join(product_texts)
 
     await loading_message.delete()
-    await update.message.reply_text(final_message)
-    await update.message.reply_photo(photo=collage_image)
+    await update.message.reply_photo(
+        photo=collage_image,
+        caption=final_message,
+        parse_mode="HTML",
+        reply_to_message_id=update.message.message_id
+    )
 
 
 async def main():

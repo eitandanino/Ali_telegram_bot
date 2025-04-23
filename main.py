@@ -55,7 +55,6 @@ def run_flask():
 
 # Telegram bot functions
 async def get_aliexpress_product_data(search_text: str):
-    cj = browser_cookie3.chrome(domain_name="aliexpress.com")
     url = f'https://he.aliexpress.com/wholesale?SearchText={urllib.parse.quote(search_text)}'
 
     headers = {
@@ -71,7 +70,7 @@ async def get_aliexpress_product_data(search_text: str):
         "Connection": "keep-alive"
     }
 
-    response = requests.get(url, headers=headers, cookies=cj)
+    response = requests.get(url, headers=headers)
     html_content = response.text
     soup = BeautifulSoup(html_content, 'html.parser')
 

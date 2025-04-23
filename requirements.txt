@@ -1,0 +1,9 @@
+requests
+beautifulsoup4
+browser-cookie3
+nest_asyncio
+python-dotenv
+aiohttp
+Pillow
+python-telegram-bot==20.7
+google-generativeai

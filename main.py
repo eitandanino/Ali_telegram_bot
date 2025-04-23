@@ -17,8 +17,6 @@ import aiohttp
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters
-from flask import Flask
-import threading
 
 # Apply necessary asynchronous handling
 nest_asyncio.apply()
@@ -42,20 +40,6 @@ client = IopClient(ALIEXPRESS_URL, ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET)
 # Triggers for Hebrew searches
 HEBREW_TRIGGERS = ["תחפש לי", "תמצא לי", "תשלוף לי"]
 
-# Flask web server setup
-app_flask = Flask(__name__)
-
-
-@app_flask.route('/')
-def index():
-    return "🤖 Bot is alive!"
-
-
-# Function to run Flask in a separate thread
-def run_flask():
-    port = int(os.environ.get("PORT", 5050))  # Render provides $PORT env var
-    app_flask.run(host="0.0.0.0", port=port)
-
 
 # Telegram bot functions
 async def get_aliexpress_product_data(search_text: str):
@@ -76,7 +60,7 @@ async def get_aliexpress_product_data(search_text: str):
 
     cookies = {
         "__rtbh.lid": "%7B%22eventType%22%3A%22lid%22%2C%22id%22%3A%229At5NANObKI4BGGakxXl%22%2C%22expiryDate%22%3A%222026-04-23T12%3A47%3A15.678Z%22%7D",
-        "__rtbh.uid": "%7B%22eventType%22%3A%22uid%22%2C%22id%22%3A%226122555644%22%2C%22expiryDate%22%3A%222026-04-23T12%3A47%3A15.678Z%22%7D"
+        # "__rtbh.uid": "%7B%22eventType%22%3A%22uid%22%2C%22id%22%3A%226122555644%22%2C%22expiryDate%22%3A%222026-04-23T12%3A47%3A15.678Z%22%7D"
     }
 
     response = requests.get(url, headers=headers, cookies=cookies)
@@ -310,5 +294,5 @@ async def main():
 if __name__ == "__main__":
     delete_webhook()
     time.sleep(3)
-    threading.Thread(target=run_flask).start()
+    print("🤖 Bot is alive!")
     asyncio.get_event_loop().run_until_complete(main())

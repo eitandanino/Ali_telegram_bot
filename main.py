@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import urllib.parse
-import browser_cookie3
 import asyncio
 import os
 import nest_asyncio
@@ -291,4 +290,4 @@ async def main():
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
-    asyncio.run(main())
+    asyncio.get_event_loop().run_until_complete(main())

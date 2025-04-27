@@ -1,3 +1,21 @@
-.env
-cookie.py
-aliexpress_cookies.json
+# Ignore everything
+*
+
+# But not these files...
+!.gitignore
+!main.py
+!requirements.txt
+
+# ...and not these folders...
+!fonts/
+!fonts/**
+!iop/
+!iop/**
+!utils/
+!utils/**
+
+# Ignore Python cache files even in allowed directories
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
